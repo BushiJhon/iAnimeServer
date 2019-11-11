@@ -37,21 +37,37 @@ def register():
     phone = data['phone']
     phone = int(phone)
 
+    phone_is_used = verify_phone(phone)
+    if phone_is_used:
+        result = {'StatusCode': -1}     # 手机号码被使用
+        return jsonify(result)
+
+    phone_format_false = verify_phone_format(phone)
+    if phone_format_false:
+        result = {'StatusCode': -2}     # 手机格式不正确
+        return jsonify(result)
+
     password = data['password']
     password = str(password)
-    if phone != "":
-        if password != "":
-            user = User()
-            user.set_phone(phone)
-            user.set_password(password)
-            user_dao = UserDAO()
-            user_dao.login(user)
-        else:
-            return "false1"
-    else:
-        return "false2"
-    result = {"StatusCode": 0}
-    return jsonify(result)
+
+    user = User()
+    user.set_phone(phone)
+    user.set_password(password)
+    user_dao = UserDAO()
+    user_dao.add(user)
+
+    result = {'StatusCode': 0}
+    return jsonify(result)      # 注册成功
+
+
+# 验证电话号码
+def verify_phone(phone):
+    return False
+
+
+# 验证手机格式
+def verify_phone_format(phone):
+    return True
 
 
 # 退出账号
@@ -216,6 +232,7 @@ def upload():
     colorization_image = data['colorization_image']
     colorization_image = str(colorization_image)
     return 'upload'
+
 
 # 提交上色请求
 app.route('/illustration/colorization', methods=['POST'])
