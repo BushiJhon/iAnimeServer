@@ -3,6 +3,7 @@ import pymysql
 
 from pojo.User import User
 
+
 class UserDAO:
     __db_host = '127.0.0.1'
     __db_admin = 'root'
@@ -11,8 +12,8 @@ class UserDAO:
 
     # 增加用户
     def add(self, user):
-        sql = 'insert into user(user_id, phone, password) values( null, %s, "%s" )' % (
-        user.get_phone(), user.get_password())
+        sql = 'insert into user(user_id, phone, password) values( null, "%s", "%s" )' % (
+            user.get_phone(), user.get_password())
         connection = pymysql.connect(self.__db_host, self.__db_admin, self.__db_password, self.__db)
         cursor = connection.cursor()
         try:
@@ -28,23 +29,23 @@ class UserDAO:
 
     # 查找
     def retrieve(self, user):
-        sql = 'select * from user where phone = %s and password = "%s"' % (user.get_phone(), user.get_password())
+        retrieve_user = None
+
+        sql = 'select * from user where phone = "%s" and password = "%s"' % (user.get_phone(), user.get_password())
         connection = pymysql.connect(self.__db_host, self.__db_admin, self.__db_password, self.__db)
         cursor = connection.cursor()
         try:
             cursor.execute(sql)
-            retrieve_user = cursor.fetchone()
+            result = cursor.fetchone()
+            if result is not None:
+                retrieve_user = User()
+                retrieve_user.set_user_id(result[0])
+                retrieve_user.set_phone(result[1])
+                retrieve_user.set_password(result[2])
         except:
             traceback.print_exc()
         finally:
             connection.close()
             cursor.close()
-        print(retrieve_user)
-        return
 
-
-user = User()
-# user.set_phone(17802002999)
-# user.set_password('John')
-# user_dao = UserDAO()
-# user_dao.retrieve(user)
+        return retrieve_user
