@@ -1,5 +1,3 @@
-from dao.UserDAO import UserDAO
-
 
 class User:
     __phone = None
