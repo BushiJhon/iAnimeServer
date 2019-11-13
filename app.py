@@ -1,5 +1,6 @@
 from flask import *
 
+from auth.Auth import Auth
 from dao.UserDAO import UserDAO
 from pojo.User import User
 
@@ -16,18 +17,22 @@ def hello_world():
 def login():
     data = request.get_json()
     phone = data['phone']
-    phone = int(phone)
 
     password = data['password']
     password = str(password)
-    if phone != "":
-        if password != "":
-            userDAO = UserDAO()
-        else:
-            return "false1"
-    else:
-        return "false2"
-    return 'loginSuccess'
+
+    user = User()
+    user.set_phone(phone)
+    user.set_password(password)
+    user = UserDAO().retrieve(user)
+
+    if user is None:
+        result = {"StatusCode": -1}
+        return jsonify(result)
+
+    auth = Auth()
+    result = auth.authorize(user)
+    return jsonify(result)
 
 
 # 注册账户
