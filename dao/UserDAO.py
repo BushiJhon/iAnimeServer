@@ -81,17 +81,18 @@ class UserDAO:
     # 更新
     def update(self, user):
         sql = 'update user set nick_name = "%s", avatar = "%s", background_photo = "%s"' \
-              ', signature = "%s" where user_id = %s' % (user.get_nick_name(), user.get_avatar(), user.get_background_photo(),
-                                                         user.get_signature(), user.get_user_id())
+              ', signature = "%s" where user_id = %s' % (
+                  user.get_nick_name(), user.get_avatar(), user.get_background_photo(),
+                  user.get_signature(), user.get_user_id())
         connection = pymysql.connect(self.__db_host, self.__db_admin, self.__db_password, self.__db, charset='utf8')
         cursor = connection.cursor()
         try:
             cursor.execute(sql)
             connection.commit()
-            result = {"StatusCode":0}
+            result = {"StatusCode": 0}
         except:
             traceback.print_exc()
-            result = {"StatusCode":-2}
+            result = {"StatusCode": -2}
         finally:
             connection.close()
             cursor.close()
@@ -105,11 +106,11 @@ class UserDAO:
         try:
             cursor.execute(sql)
             connection.commit()
-            result = {"StatusCode":0,
+            result = {"StatusCode": 0,
                       "Avatar": user.get_avatar()}
         except:
             traceback.print_exc()
-            result = {"StatusCode":-2}
+            result = {"StatusCode": -2}
         finally:
             connection.close()
             cursor.close()
@@ -118,19 +119,40 @@ class UserDAO:
 
     # 更新背景
     def update_background_photo(self, user):
-        sql = 'update user set background_photo = "%s" where user_id = %s' % (user.get_background_photo(), user.get_user_id())
+        sql = 'update user set background_photo = "%s" where user_id = %s' % (
+            user.get_background_photo(), user.get_user_id())
         connection = pymysql.connect(self.__db_host, self.__db_admin, self.__db_password, self.__db, charset='utf8')
         cursor = connection.cursor()
         try:
             cursor.execute(sql)
             connection.commit()
-            result = {"StatusCode":0,
+            result = {"StatusCode": 0,
                       "Homepage": user.get_background_photo()}
         except:
             traceback.print_exc()
-            result = {"StatusCode":-2}
+            result = {"StatusCode": -2}
         finally:
             connection.close()
             cursor.close()
 
         return result
+
+    # 获取我关注的作品id
+    def get_my_like(self, user):
+        sql = 'select * from mylike where user_id = %s' % (user.get_user_id())
+        connection = pymysql.connect(self.__db_host, self.__db_admin, self.__db_password, self.__db, charset='utf8')
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql)
+            result = cursor.fetchall()
+            work_id = []
+            if result is not None:
+                for index in range(len(result)):
+                    work_id.append(result[index[1]])
+        except:
+            traceback.print_exc()
+        finally:
+            connection.close()
+            cursor.close()
+
+        return work_id
