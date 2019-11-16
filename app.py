@@ -386,8 +386,24 @@ def get_image():
 # 获取收藏作品
 @app.route('/illustration/mylike', methods=['GET'])
 def get_mylike():
+    # 获取user_id
+    auth = request.headers.get('Authorization')
+    user_id = Auth.identify(auth)
+
+    # 获取用户
+    user_dao = UserDAO()
+    retrieve_user = user_dao.get(user_id)
+
+    # 用户不存在
+    if retrieve_user is None:
+        result = {"StatusCode": -1}
+        return jsonify(result)
+
     id = request.args.get('userid')
     id = int(id)
+
+    my_like_work_ids = user_dao.get_my_like(retrieve_user.get_user_id())
+    my_like_works = WorkDAO().list(my_like_work_ids)
 
     start = request.args.get('start')
     start = int(start)
@@ -397,6 +413,8 @@ def get_mylike():
 
     type = request.args.get('type')
     type = str(type)
+
+
     return "get_mylike"
 
 
