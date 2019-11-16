@@ -12,6 +12,11 @@ class User:
     __follower = None
     __following = None
     __rank = None
+    __my_like = None
+
+    def set_my_like(self, my_like):
+        self.__my_like = my_like
+        return
 
     def set_nick_name(self, nick_name):
         self.__nick_name = nick_name
@@ -82,3 +87,6 @@ class User:
 
     def get_rank(self):
         return Rank.get_ank(self.__rank)
+
+    def get_my_like(self):
+        return self.__my_like
