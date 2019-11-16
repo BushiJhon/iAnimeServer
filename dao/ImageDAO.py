@@ -104,3 +104,37 @@ class WorkDAO:
 
         return address
 
+    # 列举
+    def list(self, ids):
+        my_like_works = []
+
+        connection = pymysql.connect(self.__db_host, self.__db_admin, self.__db_password, self.__db, charset='utf8')
+        cursor = connection.cursor()
+
+        try:
+            for index in range(len(ids)):
+                sql = 'select * from work where id = %s' % (ids[index])
+                cursor.execute(sql)
+                work_result = cursor.fetchone()
+                work = Work()
+                work.set_id(work_result[0])
+                work.set_artist(work_result[1])
+                work.set_artist_name(work_result[2])
+                work.set_name(work_result[3])
+                work.set_created(work_result[4])
+                work.set_allow_download(work_result[5])
+                work.set_forks(work_result[6])
+                work.set_likes(work_result[7])
+                work.set_allow_download(work_result[8])
+                work.set_allow_sketch(work_result[9])
+                work.set_allow_fork(work_result[10])
+                my_like_works.append(work)
+        except:
+            traceback.print_exc()
+        finally:
+            connection.close()
+            cursor.close()
+
+        return my_like_works
+
+
