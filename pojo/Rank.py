@@ -1,5 +1,4 @@
 
-
 class Rank:
     @staticmethod
     def get_ank(rank):
@@ -9,4 +8,3 @@ class Rank:
             return "二级"
         if rank == 3:
             return "灵魂画手"
-
