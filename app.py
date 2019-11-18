@@ -1,83 +1,108 @@
+import base64
 import os
-from random import random
+import re
+import random
 import cv2
 import numpy as np
 
 from flask import *
 
 from auth.Auth import Auth
+from dao.FollowDAO import FollowDAO
 from dao.FollowerDAO import FollowerDAO
 from dao.FollowingDAO import FollowingDAO
 from dao.ImageDAO import WorkDAO
+from dao.InformationDAO import InformationDAO
 from dao.UserDAO import UserDAO
+from pojo.Information import Information
 from pojo.User import User
+from operation.tricks import *
+# from operation.ai import *
+from Result import *
 
 app = Flask(__name__)
 
 
-@app.route('/')
-def hello_world():
-    return 'Hello World!'
-
-
 # 登录账户
+# 已修改
 @app.route('/user/login', methods=['POST'])
 def login():
     data = request.get_json()
+    if 'phone' not in data or 'password' not in data:
+        return "信息缺失"
+
     phone = data['phone']
+    password = data['password']
 
-    payload = data['password']
-    payload = Auth.decode_auth_token(payload)
-    # JWT 格式错误
-    if 'password' not in payload:
-        result = {"StatusCode": -1}
-        return jsonify(result)
+    # 判断电话号码是否为空
+    if phone is None:
+        return "The phone number is empty!"
 
-    password = payload['password']
+    # 判断密码是否为空
+    if password is None:
+        return "The password is empty!"
+
     user = User()
     user.set_phone(phone)
     user.set_password(password)
-    user = UserDAO().retrieve(user)
+
+    try:
+        user = UserDAO().retrieve(user)
+    except:
+        return "Server Failure!"
 
     # 用户不存在
     if user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
+    # 授权
     result = Auth.authorize(user)
     return jsonify(result)
 
 
 # 注册账户
+# 已修改
 @app.route('/user/register', methods=['POST'])
 def register():
     data = request.get_json()
+    if 'phone' not in data or 'password' not in data:
+        return "信息缺失"
+
     phone = data['phone']
+    password = data['password']
+
+    # 判断电话号码是否为空
+    if phone is None:
+        return "The phone number is empty!"
+
+    # 判断密码是否为空
+    if password is None:
+        return "The password is empty!"
 
     # 检测手机是否已经使用
     phone_is_used = verify_phone(phone)
     if phone_is_used:
-        result = {'StatusCode': -1}  # 手机号码被使用
+        result = return_status(-1)  # 手机号码被使用
         return jsonify(result)
 
     # 检测手机格式是否正确
     phone_format_false = verify_phone_format(phone)
     if phone_format_false:
-        result = {'StatusCode': -2}  # 手机格式不正确
+        result = return_status(-2)  # 手机格式不正确
         return jsonify(result)
-
-    payload = data['password']
-    payload = Auth.decode_auth_token(payload)
-    password = payload['password']
 
     user = User()
     user.set_phone(phone)
     user.set_password(password)
-    user_dao = UserDAO()
-    user_dao.add(user)
 
-    result = {'StatusCode': 0}
-    return jsonify(result)  # 注册成功
+    try:
+        user_dao = UserDAO()
+        user_dao.add(user)
+        result = return_status(0)
+        return jsonify(result)  # 注册成功
+    except:
+        return "Server failure!"
 
 
 # 验证电话号码
@@ -93,91 +118,106 @@ def verify_phone_format(phone):
 # 退出账号
 @app.route('/user/logout', methods=['GET'])
 def logout():
-    result = {"StatusCode": 0}
+    result = return_status(0)
     return jsonify(result)
 
 
 # 获取个人信息
+# 已修改
 @app.route('/user/profile', methods=['GET'])
 def getInformation():
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
 
     # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    user_id = request.args.get('userid')
+
+    information = Information()
+
     if user_id is None:
-        result = {"StatusCode": -2}
-        return jsonify(result)
+        # user_id空取JWT中id
+        information.set_user_id(auth_user_id)
+    else:
+        # user_id不为空取user_id
+        information.set_user_id(user_id)
 
-    id = request.args.get('id')
-    user_id = int(user_id)
-    id = int(id)
-
-    # 认证信息不符合
-    if user_id != id:
-        result = {"StatusCode": -2}
-        return jsonify(result)
-
-    user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
-
-    # 用户不存在
-    if retrieve_user is None:
-        result = {"StatusCode": -1};
-        return jsonify(result)
-
-    follower_dao = FollowerDAO()
-    following_dao = FollowingDAO()
-    followers = follower_dao.retrieve(retrieve_user.get_user_id())
-    followings = following_dao.retrieve(retrieve_user.get_user_id())
-    retrieve_user.set_follower(followers)
-    retrieve_user.set_following(followings)
-
-    result = {
-        "StatusCode": 0,
-        "NickName": retrieve_user.get_nick_name(),
-        "Avatar": retrieve_user.get_avatar(),
-        "BackgroundPhoto": retrieve_user.get_background_photo(),
-        "Signature": retrieve_user.get_signature(),
-        "Follower": retrieve_user.get_follower(),
-        "Following": retrieve_user.get_following(),
-        "Rank": retrieve_user.get_rank()
-    }
-    return jsonify(result)
+    try:
+        information = InformationDAO().retrieve(information)
+        if information is None:
+            # 用户不存在
+            result = return_status(-1)
+            return jsonify(result)
+        else:
+            # 返回用户信息
+            result = return_Information(0, information)
+            return jsonify(result)
+    except:
+            result = return_status(-2)
+            return jsonify(result)
 
 
 # 修改个人信息
+# 已修改
 @app.route('/user/profile', methods=['POST'])
 def modifyInformation():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
 
-    # 获取用户
-    user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
-
-    if retrieve_user is None:
-        result = {"StatusCode":-1}
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
         return jsonify(result)
 
+    # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
+    user_dao = UserDAO()
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 用户不存在
+    if retrieve_user is None:
+        result = return_status(-1)
+        return jsonify(result)
+
+    information = Information()
+    information.set_user_id(auth_user_id)
+
     data = request.get_json()
+    if 'NickName' not in data:
+        return "上传的信息不完整"
     nick_name = data['NickName']
     nick_name = str(nick_name)
+    information.set_nick_name(nick_name)
 
+    if 'Avatar' not in data:
+        return "上传的信息不完整"
     avatar = data['Avatar']
     avatar = str(avatar)
+    information.set_avatar(avatar)
 
+    if 'Signature' not in data:
+        return "上传的信息不完整"
     signature = data['Signature']
     signature = str(signature)
+    information.set_signature(signature)
 
+    if 'BackgroundPhoto' not in data:
+        return "上传的信息不完整"
     background_photo = data['BackgroundPhoto']
     background_photo = str(background_photo)
+    information.set_background_photo(background_photo)
 
-    retrieve_user.set_nick_name(nick_name)
-    retrieve_user.set_avatar(avatar)
-    retrieve_user.set_signature(signature)
-    retrieve_user.set_background_photo(background_photo)
-    result = user_dao.update(retrieve_user)
+    information_dao = InformationDAO()
+    result = information_dao.update(information)
+    result = return_status(result)
     return jsonify(result)
 
 
@@ -186,114 +226,247 @@ def mkdir(folder_path):
     folder = os.path.exists(folder_path)
     if not folder:
         os.makedirs(folder_path)
-    return
+    return folder_path
+
 
 # 上传头像
 @app.route('/user/avatar', methods=['POST'])
 def upload_avatar():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     # 设置路径
-    folder_path = 'avatar/' + str(user_id)
+    folder_path = 'avatar/' + str(auth_user_id)
     mkdir(folder_path)
 
+    information = Information()
+    information.set_user_id(auth_user_id)
     path = folder_path + '/avatar.jpg'
-    retrieve_user.set_avatar(path)
+    information.set_avatar(path)
 
     # 读取头像图片
-    avator = request.files['Avatar']
-    avator.save(path)
+    try:
+        avatar = request.get_data()
+        if avatar is None:
+            return "上传的图片为空"
+        with open(path, 'wb') as f:
+            f.write(avatar)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 数据库修改
-    result = user_dao.update_avatar(retrieve_user)
-    return jsonify(result)
+    information_dao = InformationDAO()
+    try:
+        result = information_dao.update_avatar(information)
+        if result is not None:
+            result = return_homepage(result, path)
+            return jsonify(result)
+        else:
+            result = return_status(-2)
+            return jsonify(result)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
 
 # 上传个人主页图
 @app.route('/user/homepage', methods=['POST'])
 def upload_homepage():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     # 设置路径
-    folder_path = 'background/' + str(user_id)
+    folder_path = 'background/' + str(auth_user_id)
     mkdir(folder_path)
 
+    information = Information()
     path = folder_path + '/background.jpg'
-    retrieve_user.set_background_photo(path)
+    information.set_user_id(auth_user_id)
+    information.set_background_photo(path)
 
     # 读取背景图片
-    homepage = request.files['Homepage']
-    homepage.save(path)
+    try:
+        homepage = request.get_data()
+        if homepage is None:
+            return "上传的图片为空"
+        with open(path, 'wb') as f:
+            f.write(homepage)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 数据库修改
-    result = user_dao.update_background_photo(retrieve_user)
-    return jsonify(result)
+    information_dao = InformationDAO()
+    try:
+        result = information_dao.update_background_photo(information)
+        if result is not None:
+            result = return_homepage(result, path)
+            return jsonify(result)
+        else:
+            result = return_status(-2)
+            return jsonify(result)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
 
 # 获取我关注的列表
 @app.route('/user/following', methods=['GET'])
 def following():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     following_dao = FollowingDAO()
-    followings = following_dao.retrieve(retrieve_user.get_user_id())
-    results = following_dao.get(followings)
-    return jsonify(results)
+    try:
+        followings = following_dao.retrieve(retrieve_user.get_user_id())
+        results = return_following(followings)
+        return jsonify(results)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
+
+# 点击/取消关注
+@app.route('/user/follow', methods=['POST'])
+def follow():
+    auth = request.headers.get('Authorization')
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
+    user_dao = UserDAO()
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 用户不存在
+    if retrieve_user is None:
+        result = return_status(-1)
+        return jsonify(result)
+
+    data = request.get_json()
+
+    if 'UserID' not in data or 'Cancel' not in data:
+        return "信息缺失"
+    user_id = data['UserID']
+    cancel_follow = data['Cancel']
+
+    follow_dao = FollowDAO()
+    if cancel_follow == 'True' or cancel_follow == 'true' or cancel_follow is True:
+        follow_dao.delete(user_id, auth_user_id)
+        result = return_status(1)
+        return jsonify(result)
+    if cancel_follow == 'False' or cancel_follow == 'false' or cancel_follow is False:
+        follow_dao.add(user_id, auth_user_id)
+        result = return_status(0)
+        return jsonify(result)
+    else:
+        result = return_status(-1)
+        return jsonify(result)
 
 # 获取关注我的列表
 @app.route('/user/follower', methods=['GET'])
 def follower():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     follower_dao = FollowerDAO()
-    followers = follower_dao.retrieve(retrieve_user.get_user_id())
-    results = follower_dao.get(followers)
-    return jsonify(results)
+    try:
+        followers = follower_dao.retrieve(retrieve_user.get_user_id())
+        results = return_follower(followers)
+        return jsonify(results)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
 
 # 获取11位随机数
@@ -304,126 +477,228 @@ def get_work_id():
 # 获取个人作品
 @app.route('/illustration/mywork', methods=['GET'])
 def get_myworks():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    user_id = request.args.get('userid')
+    if user_id is None:
+        return "信息不完整"
 
     # 获取用户
+    user = User()
+    user.set_user_id(user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     type = request.args.get('type')
+    if type is None:
+        return "信息不完整"
     type = str(type)
-    print(type)
 
     top = request.args.get('top')
+    if top is None:
+        return "信息不完整"
     top = str(top)
-    print(top)
 
     work_dao = WorkDAO()
+    works = work_dao.retrieve(user_id)
     if type == 'home':
         if top is 'true' or top is 'True':
             pass
         else:
-            result = work_dao.home_retrieve(user_id)
+            result = return_home(works)
             return jsonify(result)
-    else:
+    if type == 'detail':
         if top is 'true' or top is 'True':
             pass
         else:
-            result = work_dao.detail_retrieve(user_id)
+            result = return_detail(works)
             return jsonify(result)
-
+    else:
+        return "信息不正确"
 
 # 获取作品图片
 @app.route('/illustration/image', methods=['GET'])
 def get_image():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     id = request.args.get('id')
+    if id is None:
+        return "信息不完整"
     id = int(id)
 
     size = request.args.get('size')
-    size = str(size)
+    if size is None:
+        size = None
+    else:
+        size = str(size)
 
     type = request.args.get('type')
-    type = str(type)
+    if type is None:
+        type = None
+    else:
+        type = str(type)
 
     path = WorkDAO().retrieve_address(id)
+    if size == 'mid':
+        if type == 'sketch':
+            path = path + '/sketch.jpg'
+        if type is None:
+            path = path + '/work.jpg'
+        else:
+            return "信息不正确"
     if size is None:
         if type == 'sketch':
             path = path + '/sketch.jpg'
-        else:
+        if type is None:
             path = path + '/work.jpg'
+        else:
+            return "信息不正确"
     else:
-        if type == 'sketch':
-            path = path + '/sketch.jpg'
-        else:
-            path = path + '/work.jpg'
+        return "信息不正确"
 
-    with open(path, 'rb') as f:
-        image = f.read()
-    response = Response(image, mimetype='text/jpg')
-    return response
+    try:
+        with open(path, 'rb') as f:
+            image = f.read()
+            response = Response(image, mimetype='image/jpg')
+            return response
+    except:
+        return "Server Failure"
 
 
 # 获取收藏作品
 @app.route('/illustration/mylike', methods=['GET'])
 def get_mylike():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    user_id = request.args.get('userid')
+    if user_id is None:
+        return "信息不完整"
+    user_id = int(user_id)
 
     # 获取用户
+    user = User()
+    user.set_user_id(user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
-    id = request.args.get('userid')
-    id = int(id)
+    my_like_work_ids = user_dao.get_my_like(retrieve_user)
 
-    my_like_work_ids = user_dao.get_my_like(retrieve_user.get_user_id())
     my_like_works = WorkDAO().list(my_like_work_ids)
 
     start = request.args.get('start')
+    if start is None:
+        return "信息不完整"
     start = int(start)
 
     count = request.args.get('count')
+    if count is None:
+        return "信息不完整"
     count = int(count)
 
     type = request.args.get('type')
+    if type is None:
+        return "信息不完整"
     type = str(type)
 
-
-    return "get_mylike"
+    if type == 'home':
+        result = return_home_my_like(my_like_works, start, count)
+        return jsonify(result)
+    if type == 'detail':
+        result = return_detail_my_like(my_like_works, start, count)
+        return jsonify(result)
+    else:
+        return "信息不正确"
 
 
 # 获取作品详情
 @app.route('/illustration/sketchwork', methods=['GET'])
 def get_sketchwork():
+    auth = request.headers.get('Authorization')
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
+    user_dao = UserDAO()
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 用户不存在
+    if retrieve_user is None:
+        result = return_status(-1)
+        return jsonify(result)
+
     id = request.args.get('id')
+    if id is None:
+        return "信息不完整"
     id = int(id)
-    return "get_sketchwork"
+
+    work_dao = WorkDAO()
+    try:
+        work = work_dao.retrieve_information(id)
+        result = return_detail_work(work)
+        return jsonify(result)
+    except:
+        return 'Server Failure'
 
 
 # 搜索作品
@@ -481,15 +756,119 @@ def upload():
 
     colorization_image = data['colorization_image']
     colorization_image = str(colorization_image)
+
     return 'upload'
 
 
+def get_request_image(image):
+    image = re.sub('^data:image/.+;base64,', '', image)
+    image = base64.urlsafe_b64decode(image)
+    image = np.fromstring(image, dtype=np.uint8)
+    image = cv2.imdecode(image, -1)
+    return image
+
+
+# pool = []
+#
+#
+# def handle_colorization(pool):
+#     if len(pool) > 0:
+#         sketch, points = pool[0]
+#         del pool[0]
+#     improved_sketch = sketch.copy()
+#     improved_sketch = min_resize(improved_sketch, 512)
+#     improved_sketch = cv_denoise(improved_sketch)
+#     improved_sketch = sensitive(improved_sketch, s=5.0)
+#     improved_sketch = go_tail(improved_sketch)
+#
+#     std = cal_std(improved_sketch)
+#     if std > 100.0:
+#         improved_sketch = go_passline(improved_sketch)
+#         improved_sketch = min_k_down_c(improved_sketch, 2)
+#         improved_sketch = cv_denoise(improved_sketch)
+#         improved_sketch = go_tail(improved_sketch)
+#         improved_sketch = sensitive(improved_sketch, s=5.0)
+#
+#     improved_sketch = min_black(improved_sketch)
+#     improved_sketch = cv2.cvtColor(improved_sketch, cv2.COLOR_BGR2GRAY)
+#     sketch_1024 = k_resize(improved_sketch, 64)
+#     sketch_256 = mini_norm(k_resize(min_k_down(sketch_1024, 2), 16))
+#     sketch_128 = hard_norm(sk_resize(min_k_down(sketch_1024, 4), 32))
+#
+#     baby = go_baby(sketch_128, opreate_normal_hint(ini_hint(sketch_128), points, type=0, length=1))
+#     baby = de_line(baby, sketch_128)
+#     for _ in range(16):
+#         baby = blur_line(baby, sketch_128)
+#     baby = go_tail(baby)
+#     baby = clip_15(baby)
+#
+#     composition = go_gird(sketch=sketch_256, latent=d_resize(baby, sketch_256.shape), hint=ini_hint(sketch_256))
+#     composition = go_tail(composition)
+#
+#     painting_function = go_head
+#     reference = None
+#     alpha = 0
+#     result = painting_function(
+#         sketch=sketch_1024,
+#         global_hint=k_resize(composition, 14),
+#         local_hint=opreate_normal_hint(ini_hint(sketch_1024), points, type=2, length=2),
+#         global_hint_x=k_resize(reference, 14) if reference is not None else k_resize(composition, 14),
+#         alpha=(1 - alpha) if reference is not None else 1
+#     )
+#     result = go_tail(result)
+#     cv2.imwrite('works/1/63435765347/result.jpg', result)
+#     return
+
+
 # 提交上色请求
-app.route('/illustration/colorization', methods=['POST'])
-
-
+@app.route('/illustration/colorization', methods=['POST'])
 def colorization():
-    return
+    # 获取user_id
+    auth = request.headers.get('Authorization')
+    user_id = Auth.identify(auth)
+
+    # 获取用户
+    user_dao = UserDAO()
+    retrieve_user = user_dao.get(user_id)
+
+    # 用户不存在
+    if retrieve_user is None:
+        result = {"StatusCode": -1}
+        return jsonify(result)
+
+    # 获取信息
+    datas = request.get_json()
+
+    image = datas['image']
+    print(image)
+
+    points = datas['points']
+    for _ in range(len(points)):
+        points[_][1] = 1 - points[_][1]
+
+    # data = datas['data']
+    #
+    # anchor = data['anchor']
+    # anchor_x = anchor['x']
+    # anchor_y = anchor['y']
+    # anchor_color = anchor['color']
+    # print(anchor_x + ' ' + anchor_y + ' ' + anchor_color)
+    #
+    # hint = data['hint']
+
+    # 生成图片id
+    # id = get_work_id()
+    # print(id)
+    # id = str(id)
+    # path = mkdir('works/1/' + id)
+    # image = get_request_image(image)
+    # image = from_png_to_jpg(image)
+    # cv2.imwrite(path + '/sketch.jpg', image)
+    # image = cv2.imread('works/1/63435765347/sketch.jpg')
+    # pool.append([image, points])
+    # handle_colorization(pool)
+
+    return "hello"
 
 
 if __name__ == '__main__':
