@@ -14,11 +14,16 @@ from dao.FollowingDAO import FollowingDAO
 from dao.ImageDAO import WorkDAO
 from dao.InformationDAO import InformationDAO
 from dao.UserDAO import UserDAO
+from dao.addressDAO import AddressDAO
+from pojo.Image import Work
 from pojo.Information import Information
 from pojo.User import User
 from operation.tricks import *
 # from operation.ai import *
+
+
 from Result import *
+from pojo.address import Address
 
 app = Flask(__name__)
 
@@ -543,19 +548,19 @@ def get_image():
         return jsonify(result)
 
     # 获取用户
-    user = User()
-    user.set_user_id(auth_user_id)
-    user_dao = UserDAO()
-    try:
-        retrieve_user = user_dao.retrieve(user)
-    except:
-        result = return_status(-2)
-        return jsonify(result)
+    # user = User()
+    # user.set_user_id(auth_user_id)
+    # user_dao = UserDAO()
+    # try:
+    #     retrieve_user = user_dao.retrieve(user)
+    # except:
+    #     result = return_status(-2)
+    #     return jsonify(result)
 
     # 用户不存在
-    if retrieve_user is None:
-        result = return_status(-1)
-        return jsonify(result)
+    # if retrieve_user is None:
+    #     result = return_status(-1)
+    #     return jsonify(result)
 
     id = request.args.get('id')
     if id is None:
@@ -573,24 +578,29 @@ def get_image():
         type = None
     else:
         type = str(type)
+    print(type)
+    print(size)
 
     path = WorkDAO().retrieve_address(id)
     if size == 'mid':
         if type == 'sketch':
             path = path + '/sketch.jpg'
-        if type is None:
-            path = path + '/work.jpg'
         else:
-            return "信息不正确"
-    if size is None:
-        if type == 'sketch':
-            path = path + '/sketch.jpg'
-        if type is None:
-            path = path + '/work.jpg'
-        else:
-            return "信息不正确"
+            if type is None or type == 'sketch':
+                path = path + '/work.jpg'
+            else:
+                return "信息不正确"
     else:
-        return "信息不正确"
+        if size is None:
+            if type == 'sketch':
+                path = path + '/sketch.jpg'
+            else:
+                if type is None or type == 'sketch':
+                    path = path + '/work.jpg'
+                else:
+                    return "信息不正确"
+        else:
+            return "信息不正确"
 
     try:
         with open(path, 'rb') as f:
@@ -661,9 +671,9 @@ def get_mylike():
         return "信息不正确"
 
 
-# 获取作品详情
-@app.route('/illustration/sketchwork', methods=['GET'])
-def get_sketchwork():
+# 收藏作品
+@app.route('/illustration/mylike', methods=['POST'])
+def like():
     auth = request.headers.get('Authorization')
     auth_user_id = Auth.identify(auth)
 
@@ -686,6 +696,52 @@ def get_sketchwork():
     if retrieve_user is None:
         result = return_status(-1)
         return jsonify(result)
+
+    data = request.get_json()
+
+    if 'id' not in data or 'Cancel' not in data:
+        return "信息缺失"
+    id = data['id']
+    cancel_like = data['Cancel']
+
+    work_dao = WorkDAO()
+    if cancel_like == 'True' or cancel_like == 'true' or cancel_like is True:
+        work_dao.delete_my_like(auth_user_id, id)
+        result = return_status(1)
+        return jsonify(result)
+    if cancel_like == 'False' or cancel_like == 'false' or cancel_like is False:
+        work_dao.add_my_like(auth_user_id, id)
+        result = return_status(0)
+        return jsonify(result)
+    else:
+        result = return_status(-1)
+        return jsonify(result)
+
+# 获取作品详情
+@app.route('/illustration/sketchwork', methods=['GET'])
+def get_sketchwork():
+    auth = request.headers.get('Authorization')
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 获取用户
+    # user = User()
+    # user.set_user_id(auth_user_id)
+    # user_dao = UserDAO()
+    # try:
+    #     retrieve_user = user_dao.retrieve(user)
+    # except:
+    #     result = return_status(-2)
+    #     return jsonify(result)
+
+    # 用户不存在
+    # if retrieve_user is None:
+    #     result = return_status(-1)
+    #     return jsonify(result)
 
     id = request.args.get('id')
     if id is None:
@@ -730,26 +786,62 @@ def get_todays():
 # 发布作品
 @app.route('/illustration/upload', methods=['POST'])
 def upload():
+    auth = request.headers.get('Authorization')
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
+    user_dao = UserDAO()
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
+
+    # 用户不存在
+    if retrieve_user is None:
+        result = return_status(-1)
+        return jsonify(result)
+
     data = request.get_json()
+    if 'name' not in data or 'created' not in data or 'description' not in data or 'tags' not in data or 'allow_download' not in data or 'allow_sketch' not in data or 'allow_fork' not in data or 'original_image' not in data or 'colorization_image' not in data:
+        return '信息不完整'
+
+    work = Work()
+    work.set_artist(auth_user_id)
+
     name = data['name']
     name = str(name)
+    work.set_name(name)
 
     created_time = data['created']
     created_time = str(created_time)
+    work.set_created(created_time)
 
     description = data['description']
     description = str(description)
+    work.set_description(description)
 
     tags = data['tags']
+    work.set_tags(tags)
 
     allow_downloaded = data['allow_download']
     allow_downloaded = bool(allow_downloaded)
+    work.set_allow_fork(allow_downloaded)
 
     allow_sketch = data['allow_sketch']
     allow_sketch = bool(allow_sketch)
+    work.set_allow_sketch(allow_sketch)
 
     allow_fork = data['allow_fork']
     allow_fork = bool(allow_fork)
+    work.set_allow_fork(allow_fork)
 
     original_image = data['original_image']
     original_image = str(original_image)
@@ -757,7 +849,18 @@ def upload():
     colorization_image = data['colorization_image']
     colorization_image = str(colorization_image)
 
-    return 'upload'
+    address = Address()
+    address.set_original_image(original_image)
+    address.set_colorization_image(colorization_image)
+
+    work_dao = WorkDAO()
+    try:
+        work_dao.add_work(work, address)
+        result = return_status(0)
+        return jsonify(result)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
 
 def get_request_image(image):
@@ -768,12 +871,12 @@ def get_request_image(image):
     return image
 
 
-# pool = []
+pool = []
 #
 #
-# def handle_colorization(pool):
+# def handle_colorization():
 #     if len(pool) > 0:
-#         sketch, points = pool[0]
+#         sketch, points, path = pool[0]
 #         del pool[0]
 #     improved_sketch = sketch.copy()
 #     improved_sketch = min_resize(improved_sketch, 512)
@@ -816,33 +919,44 @@ def get_request_image(image):
 #         alpha=(1 - alpha) if reference is not None else 1
 #     )
 #     result = go_tail(result)
-#     cv2.imwrite('works/1/63435765347/result.jpg', result)
+#     cv2.imwrite(path, result)
 #     return
 
 
 # 提交上色请求
 @app.route('/illustration/colorization', methods=['POST'])
 def colorization():
-    # 获取user_id
     auth = request.headers.get('Authorization')
-    user_id = Auth.identify(auth)
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 获取用户
+    user = User()
+    user.set_user_id(auth_user_id)
     user_dao = UserDAO()
-    retrieve_user = user_dao.get(user_id)
+    try:
+        retrieve_user = user_dao.retrieve(user)
+    except:
+        result = return_status(-2)
+        return jsonify(result)
 
     # 用户不存在
     if retrieve_user is None:
-        result = {"StatusCode": -1}
+        result = return_status(-1)
         return jsonify(result)
 
     # 获取信息
-    datas = request.get_json()
+    data = request.get_json()
+    if 'image' not in data or 'points' not in data:
+        return "信息不完整"
 
-    image = datas['image']
-    print(image)
+    image = data['image']
 
-    points = datas['points']
+    points = data['points']
     for _ in range(len(points)):
         points[_][1] = 1 - points[_][1]
 
@@ -856,19 +970,78 @@ def colorization():
     #
     # hint = data['hint']
 
-    # 生成图片id
-    # id = get_work_id()
-    # print(id)
-    # id = str(id)
-    # path = mkdir('works/1/' + id)
-    # image = get_request_image(image)
-    # image = from_png_to_jpg(image)
-    # cv2.imwrite(path + '/sketch.jpg', image)
-    # image = cv2.imread('works/1/63435765347/sketch.jpg')
-    # pool.append([image, points])
-    # handle_colorization(pool)
+    # 处理图片
+    try:
+        image = get_request_image(image)
+        image = from_png_to_jpg(image)
+    except:
+        result = return_status(-1)
+        return jsonify(result)
 
-    return "hello"
+    # 生成图片id
+    id = get_work_id()
+
+    path = 'works/' + str(auth_user_id) + '/' + str(id)
+    path = mkdir(path)
+
+    cv2.imwrite(path + '/sketch.jpg', image)
+
+    address = Address()
+    address.set_work_id(id)
+    address.set_user_id(auth_user_id)
+    address.set_path(path)
+    original_image = str(auth_user_id) + str(id) + '0'
+    address.set_original_image(original_image)
+    colorization_image = str(auth_user_id) + str(id) + '1'
+    address.set_colorization_image(colorization_image)
+    receipt = str(id) + 'r' + str(auth_user_id)
+    address.set_receipt(receipt)
+
+    address_dao = AddressDAO()
+    address_dao.add(address)
+
+    path = path + '/result.jpg'
+    pool.append([image, points, path])
+    cv2.imwrite(path, image)
+
+    result = return_receipt(0, address)
+    return jsonify(result)
+
+
+# 查询上色请求
+@app.route('/illustration/colorization', methods=['GET'])
+def get_receipt():
+    auth = request.headers.get('Authorization')
+    auth_user_id = Auth.identify(auth)
+
+    # Authorization header不正确
+    if auth_user_id is None:
+        result = return_status(-2)
+        return jsonify(result)
+
+    receipt = request.args.get('receipt')
+    if receipt is None:
+        return '信息不完整'
+
+    receipt = str(receipt)
+    address = Address()
+    address.set_receipt(receipt)
+
+    address_dao = AddressDAO()
+    address = address_dao.retrieve(address)
+
+    if address is None:
+        result = return_status(-1)
+        return jsonify(result)
+
+    path = address.get_path() + '/result.jpg'
+    flag = os.path.exists(path)
+    if flag:
+        result = return_load(0, address)
+        return jsonify(result)
+    else:
+        result = return_status(1)
+        return jsonify(result)
 
 
 if __name__ == '__main__':
