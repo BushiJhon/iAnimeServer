@@ -58,7 +58,11 @@ DDL (MySQL)
         create table address (
         work_id bigint not null,
         path varchar(50) not null,
-        primary key(work_id)
+        original_image varchar(50),
+        colorization_image varchar(50),
+        user_id int not null,
+        receipt varchar(50),
+        primary key(work_id, user_id)
         )default charset=utf8;
         
 8.
