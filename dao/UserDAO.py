@@ -23,6 +23,11 @@ class UserDAO:
         cursor = connection.cursor()
         try:
             cursor.execute(sql)
+            sql = 'select user_id from user where phone = "%s"' % user.get_phone()
+            cursor.execute(sql)
+            result = cursor.fetchone()
+            sql = 'insert into information(user_id) values(%s)' % result[0]
+            cursor.execute(sql)
             connection.commit()
         except:
             traceback.print_exc()
