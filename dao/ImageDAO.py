@@ -121,10 +121,9 @@ class WorkDAO:
         connection = pymysql.connect(host=self.__db_host, user=self.__db_admin, password=self.__db_password,
                                      database=self.__db, port=self.__port, charset=self.__charset)
         cursor = connection.cursor()
-
         try:
             for index in range(len(ids)):
-                sql = 'select * from information where id = %s' % (ids[index])
+                sql = 'select * from work where id = %s' % ids[index]
                 cursor.execute(sql)
                 work_result = cursor.fetchone()
                 work = Work()
@@ -179,3 +178,60 @@ class WorkDAO:
 
         return result_work
 
+    def add_my_like(self, user_id, work_id):
+        sql = 'insert into my_like values(%s, %s)' % (user_id, work_id)
+        connection = pymysql.connect(host=self.__db_host, user=self.__db_admin, password=self.__db_password,
+                                     database=self.__db, port=self.__port, charset=self.__charset)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql)
+            connection.commit()
+        except:
+            traceback.print_exc()
+            connection.rollback()
+        finally:
+            connection.close()
+            cursor.close()
+        return
+
+    def delete_my_like(self, user_id, work_id):
+        sql = 'delete from my_like where user_id = %s and work_id = %s' % (user_id, work_id)
+        connection = pymysql.connect(host=self.__db_host, user=self.__db_admin, password=self.__db_password,
+                                     database=self.__db, port=self.__port, charset=self.__charset)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql)
+            connection.commit()
+        except:
+            traceback.print_exc()
+            connection.rollback()
+        finally:
+            connection.close()
+            cursor.close()
+        return
+
+    def add_work(self, work, address):
+        sql = 'select nick_name from information where user_id = %s' % work.get_artist()
+        connection = pymysql.connect(host=self.__db_host, user=self.__db_admin, password=self.__db_password,
+                                     database=self.__db, port=self.__port, charset=self.__charset)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql)
+            result = cursor.fetchone()
+            if result is not None:
+                work.set_artist_name(result[0])
+            sql = 'select work_id from address where original_image = "%s" and colorization_image = "%s"' % (address.get_original_image(), address.get_colorization_image())
+            cursor.execute(sql)
+            result = cursor.fetchone()
+            if result is not None:
+                work.set_id(result[0])
+            sql = 'insert into work values(%s, %s, "%s", "%s", %s, "%s", %s, %s, %s, %s, %s)' % (work.get_id(), work.get_artist(), work.get_artist_name(), work.get_name(), work.get_created(), work.get_description(), work.get_forks(), work.get_likes(), work.get_allow_download(), work.get_allow_sketch(), work.get_allow_fork())
+            cursor.execute(sql)
+            connection.commit()
+        except:
+            traceback.print_exc()
+        finally:
+            connection.close()
+            cursor.close()
+
+        return
